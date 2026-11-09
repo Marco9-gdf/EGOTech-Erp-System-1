@@ -438,3 +438,202 @@ export function getShifts(req, res) {
     res.status(500).json({ error: 'Failed to get shifts.' });
   }
 }
+
+// -------------------------------------------------------------
+// Employee Self-Service: Profile Update Requests & HR Approval
+// -------------------------------------------------------------
+
+export function submitProfileRequest(req, res) {
+  try {
+    const employeeId = req.currentUser.employee_id;
+    if (!employeeId) {
+      return res.status(400).json({ error: 'Current account has no associated employee profile to update.' });
+    }
+
+    const { changes, reason } = req.body || {};
+    if (!changes || typeof changes !== 'object' || Object.keys(changes).length === 0) {
+      return res.status(400).json({ error: 'No profile changes provided.' });
+    }
+
+    const currentEmp = db.prepare('SELECT * FROM employees WHERE id = ?').get(employeeId);
+    if (!currentEmp) {
+      return res.status(404).json({ error: 'Employee record not found.' });
+    }
+
+    // Check if there is already an active pending request
+    const pendingExisting = db.prepare(`
+      SELECT id FROM employee_profile_requests
+      WHERE employee_id = ? AND status = 'Pending'
+    `).get(employeeId);
+
+    if (pendingExisting) {
+      return res.status(400).json({
+        error: 'You already have a pending profile change request awaiting HR approval. Please wait for HR to review it before submitting another.',
+        existing_request_id: pendingExisting.id
+      });
+    }
+
+    const companyId = currentEmp.company_id || req.currentUser.company_id || 1;
+    const userId = req.user.id;
+
+    const result = db.prepare(`
+      INSERT INTO employee_profile_requests (
+        company_id, employee_id, requested_by_user_id, changes_json, current_data_json, reason, status
+      ) VALUES (?, ?, ?, ?, ?, ?, 'Pending')
+    `).run(
+      companyId,
+      employeeId,
+      userId,
+      JSON.stringify(changes),
+      JSON.stringify(currentEmp),
+      reason || 'Employee profile self-service update'
+    );
+
+    res.json({
+      message: 'Profile update request submitted successfully. It will take effect once reviewed and approved by HR.',
+      request_id: result.lastInsertRowid,
+      status: 'Pending'
+    });
+  } catch (err) {
+    console.error('submitProfileRequest error:', err);
+    res.status(500).json({ error: 'Failed to submit profile change request: ' + err.message });
+  }
+}
+
+export function getProfileRequests(req, res) {
+  try {
+    const isHrOrAdmin = ['admin', 'hr', 'owner'].includes(req.user.role);
+    const employeeId = req.currentUser.employee_id;
+    const companyId = req.currentUser.company_id || 1;
+
+    let requests;
+    if (isHrOrAdmin && !req.query.my_requests) {
+      // HR/Admin sees all company change requests
+      requests = db.prepare(`
+        SELECT r.*, e.employee_code, e.first_name, e.last_name, e.email, e.designation,
+               u.name as reviewer_name
+        FROM employee_profile_requests r
+        JOIN employees e ON r.employee_id = e.id
+        LEFT JOIN users u ON r.reviewed_by = u.id
+        WHERE r.company_id = ?
+        ORDER BY CASE WHEN r.status = 'Pending' THEN 0 ELSE 1 END, r.created_at DESC
+      `).all(companyId);
+    } else {
+      // Employee sees only their own requests
+      if (!employeeId) {
+        return res.json({ requests: [] });
+      }
+      requests = db.prepare(`
+        SELECT r.*, e.employee_code, e.first_name, e.last_name, e.email, e.designation,
+               u.name as reviewer_name
+        FROM employee_profile_requests r
+        JOIN employees e ON r.employee_id = e.id
+        LEFT JOIN users u ON r.reviewed_by = u.id
+        WHERE r.employee_id = ?
+        ORDER BY r.created_at DESC
+      `).all(employeeId);
+    }
+
+    const formatted = requests.map(r => ({
+      ...r,
+      changes: JSON.parse(r.changes_json || '{}'),
+      current_data: JSON.parse(r.current_data_json || '{}'),
+    }));
+
+    res.json({ requests: formatted });
+  } catch (err) {
+    console.error('getProfileRequests error:', err);
+    res.status(500).json({ error: 'Failed to fetch profile update requests: ' + err.message });
+  }
+}
+
+export function reviewProfileRequest(req, res) {
+  try {
+    const { id } = req.params;
+    const { action, review_notes } = req.body;
+
+    if (!['Approved', 'Rejected'].includes(action)) {
+      return res.status(400).json({ error: 'Action must be either "Approved" or "Rejected".' });
+    }
+
+    const requestRow = db.prepare('SELECT * FROM employee_profile_requests WHERE id = ?').get(id);
+    if (!requestRow) {
+      return res.status(404).json({ error: 'Profile change request not found.' });
+    }
+
+    if (requestRow.status !== 'Pending') {
+      return res.status(400).json({ error: `This request has already been ${requestRow.status.toLowerCase()}.` });
+    }
+
+    const reviewerId = req.user.id;
+
+    if (action === 'Approved') {
+      const changes = JSON.parse(requestRow.changes_json || '{}');
+
+      // Update employee record with permitted self-service fields
+      db.prepare(`
+        UPDATE employees SET
+          first_name = COALESCE(?, first_name),
+          last_name = COALESCE(?, last_name),
+          phone = COALESCE(?, phone),
+          bank_name = COALESCE(?, bank_name),
+          bank_account_no = COALESCE(?, bank_account_no),
+          bank_ifsc = COALESCE(?, bank_ifsc),
+          tax_id = COALESCE(?, tax_id)
+        WHERE id = ?
+      `).run(
+        changes.first_name || null,
+        changes.last_name || null,
+        changes.phone || null,
+        changes.bank_name || null,
+        changes.bank_account_no || null,
+        changes.bank_ifsc || null,
+        changes.tax_id || null,
+        requestRow.employee_id
+      );
+
+      // If name was updated, synchronize user table display name
+      if (changes.first_name || changes.last_name) {
+        const emp = db.prepare('SELECT first_name, last_name FROM employees WHERE id = ?').get(requestRow.employee_id);
+        if (emp) {
+          const fullName = `${emp.first_name} ${emp.last_name}`.trim();
+          db.prepare('UPDATE users SET name = ? WHERE employee_id = ?').run(fullName, requestRow.employee_id);
+        }
+      }
+
+      db.prepare(`
+        UPDATE employee_profile_requests SET
+          status = 'Approved',
+          reviewed_by = ?,
+          reviewed_at = CURRENT_TIMESTAMP,
+          review_notes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(reviewerId, review_notes || 'Approved by HR', id);
+
+      return res.json({
+        message: 'Employee profile update approved and applied successfully.',
+        status: 'Approved'
+      });
+    } else {
+      // Rejected
+      db.prepare(`
+        UPDATE employee_profile_requests SET
+          status = 'Rejected',
+          reviewed_by = ?,
+          reviewed_at = CURRENT_TIMESTAMP,
+          review_notes = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(reviewerId, review_notes || 'Rejected by HR', id);
+
+      return res.json({
+        message: 'Profile update request rejected.',
+        status: 'Rejected'
+      });
+    }
+  } catch (err) {
+    console.error('reviewProfileRequest error:', err);
+    res.status(500).json({ error: 'Failed to process profile review: ' + err.message });
+  }
+}

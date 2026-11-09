@@ -16,7 +16,7 @@ export const CURRENCY_OPTIONS = [
   { code: 'MYR', symbol: 'RM', label: 'MYR (RM) - Malaysian Ringgit' },
 ];
 
-export function formatCurrency(amount, symbol = '$') {
+export function formatCurrency(amount, symbol = '₹') {
   const num = Number(amount) || 0;
   const cleanSymbol = (!symbol || symbol === '?' || symbol.trim() === '') ? '₹' : symbol;
   return `${cleanSymbol} ${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

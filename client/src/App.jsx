@@ -45,6 +45,12 @@ function ProtectedRoute({ children, allowedRoles }) {
   return children;
 }
 
+function ProfileRedirect() {
+  const { user } = useAuth();
+  const empId = user?.employee_id || 1;
+  return <Navigate to={`/employees/${empId}`} replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -84,6 +90,16 @@ export default function App() {
               }
             />
 
+            {/* Profile Self-Service Route */}
+            <Route
+              path="profile"
+              element={
+                <ProtectedRoute allowedRoles={['owner', 'admin', 'hr', 'employee']}>
+                  <ProfileRedirect />
+                </ProtectedRoute>
+              }
+            />
+
             {/* HR / Admin Routes */}
             <Route
               path="employees"
@@ -96,7 +112,7 @@ export default function App() {
             <Route
               path="employees/:id"
               element={
-                <ProtectedRoute allowedRoles={['owner', 'admin', 'hr']}>
+                <ProtectedRoute allowedRoles={['owner', 'admin', 'hr', 'employee']}>
                   <EmployeeDetail />
                 </ProtectedRoute>
               }

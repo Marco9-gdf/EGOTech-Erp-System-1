@@ -80,6 +80,7 @@ export default function Sidebar({ isOpen, onClose }) {
         title: 'Workforce',
         items: [
           ...(isHr ? [{ name: 'Employees', to: '/employees', icon: Users }] : []),
+          ...(!isHr ? [{ name: 'My Profile & Details', to: '/profile', icon: Users }] : []),
           { name: 'Attendance', to: '/attendance', icon: CalendarCheck },
           { name: 'Leaves', to: '/leaves', icon: CalendarDays },
           { name: 'Expenses', to: '/expenses', icon: Receipt },

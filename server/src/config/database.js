@@ -687,6 +687,35 @@ export function initDatabase() {
   } catch (e) {
     // Non-fatal
   }
+
+  // Attendance selfie column for remote workforce verification
+  safeAddColumn('attendance', 'selfie_url', 'TEXT');
+
+  // Employee Profile Self-Service Change Requests (HR Approval Workflow)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS employee_profile_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        company_id INTEGER DEFAULT 1,
+        employee_id INTEGER NOT NULL,
+        requested_by_user_id INTEGER NOT NULL,
+        changes_json TEXT NOT NULL,
+        current_data_json TEXT NOT NULL,
+        reason TEXT,
+        status TEXT DEFAULT 'Pending',
+        reviewed_by INTEGER,
+        reviewed_at DATETIME,
+        review_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+        FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+      );
+    `);
+  } catch (e) {
+    // Non-fatal
+  }
 }
 
 function safeAddColumn(tableName, columnName, columnDefinition) {

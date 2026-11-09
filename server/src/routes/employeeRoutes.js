@@ -8,6 +8,9 @@ import {
   deleteEmployee,
   getDepartments,
   getShifts,
+  submitProfileRequest,
+  getProfileRequests,
+  reviewProfileRequest,
 } from '../controllers/employeeController.js';
 import { authenticateToken, requireRoles } from '../middleware/auth.js';
 
@@ -17,6 +20,11 @@ router.use(authenticateToken);
 
 router.get('/departments', getDepartments);
 router.get('/shifts', getShifts);
+
+// Profile Change Requests (Must be placed before /:id)
+router.post('/profile-request', submitProfileRequest);
+router.get('/profile-requests', getProfileRequests);
+router.put('/profile-requests/:id/review', requireRoles('admin', 'hr'), reviewProfileRequest);
 
 router.get('/', getEmployees);
 router.get('/:id', getEmployeeById);

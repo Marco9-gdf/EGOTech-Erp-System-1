@@ -754,7 +754,7 @@ export default function Payroll() {
           </p>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Performance Bonus ($)</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Performance Bonus ({currencySymbol})</label>
             <input
               type="number"
               value={bonusInput}
@@ -764,7 +764,7 @@ export default function Payroll() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">Other Deductions ($)</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Other Deductions ({currencySymbol})</label>
             <input
               type="number"
               value={otherDeductionsInput}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { api } from '../services/api';
 import Badge from '../components/Common/Badge';
 import Modal from '../components/Common/Modal';
@@ -17,10 +18,16 @@ import {
   AlertCircle,
   Crown,
   Building2,
+  UserCheck,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ShieldCheck,
 } from 'lucide-react';
 
 export default function Employees() {
   const { user, role, currencySymbol = '₹', currencyCode = 'INR' } = useAuth();
+  const toast = useToast();
   const isOwner = role === 'owner';
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -32,6 +39,14 @@ export default function Employees() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Employee Profile Change Requests (HR Approval Workflow)
+  const [requestsModalOpen, setRequestsModalOpen] = useState(false);
+  const [profileRequests, setProfileRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [reviewingId, setReviewingId] = useState(null);
+  const [reviewNotes, setReviewNotes] = useState({});
+  const [requestsFilter, setRequestsFilter] = useState('Pending');
 
   // Form State
   const [formData, setFormData] = useState({
@@ -79,6 +94,41 @@ export default function Employees() {
     }
   };
 
+  const fetchProfileRequests = async () => {
+    try {
+      setLoadingRequests(true);
+      const res = await api.getProfileRequests();
+      setProfileRequests(res.requests || []);
+    } catch (err) {
+      console.error('Failed to load profile requests:', err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const handleReviewRequest = async (requestId, action) => {
+    try {
+      setReviewingId(requestId);
+      const note = reviewNotes[requestId] || '';
+      await api.reviewProfileRequest(requestId, {
+        action,
+        review_notes: note,
+      });
+      toast.success(
+        action === 'Approved'
+          ? 'Profile updates approved and updated in employee records.'
+          : 'Profile update request has been rejected.',
+        action === 'Approved' ? 'Changes Approved' : 'Request Rejected'
+      );
+      fetchProfileRequests();
+      fetchEmployees();
+    } catch (err) {
+      toast.error(err.message || 'Failed to process request.');
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
   useEffect(() => {
     Promise.all([api.getDepartments(), api.getShifts()]).then(([dRes, sRes]) => {
       setDepartments(dRes.departments || []);
@@ -87,6 +137,7 @@ export default function Employees() {
         setFormData((prev) => ({ ...prev, department_id: dRes.departments[0].id }));
       }
     });
+    fetchProfileRequests();
   }, []);
 
   useEffect(() => {
@@ -116,6 +167,8 @@ export default function Employees() {
     }
   };
 
+  const pendingRequestsCount = profileRequests.filter((r) => r.status === 'Pending').length;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -130,20 +183,41 @@ export default function Employees() {
               : 'View workforce directory, compensation rules, and profiles'}
           </p>
         </div>
-        <button
-          onClick={() => {
-            setError('');
-            setAddModalOpen(true);
-          }}
-          className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-md flex items-center space-x-2 transition cursor-pointer self-start sm:self-auto ${
-            isOwner
-              ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
-              : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
-          }`}
-        >
-          <UserPlus className="w-4 h-4" />
-          <span>{isOwner ? '+ Add Egotech Employee' : 'Add New Employee'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
+          <button
+            onClick={() => {
+              fetchProfileRequests();
+              setRequestsModalOpen(true);
+            }}
+            className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs flex items-center space-x-2 transition cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4 text-indigo-600" />
+            <span>Profile Requests</span>
+            {pendingRequestsCount > 0 ? (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full animate-pulse">
+                {pendingRequestsCount} Pending
+              </span>
+            ) : (
+              <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                0
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setError('');
+              setAddModalOpen(true);
+            }}
+            className={`px-4 py-2.5 rounded-xl text-xs font-semibold shadow-md flex items-center space-x-2 transition cursor-pointer ${
+              isOwner
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+                : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20'
+            }`}
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>{isOwner ? '+ Add Egotech Employee' : 'Add New Employee'}</span>
+          </button>
+        </div>
       </div>
 
       {isOwner && (
@@ -552,6 +626,213 @@ export default function Employees() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Profile Update Requests Review Modal (HR Approval Queue) */}
+      <Modal
+        isOpen={requestsModalOpen}
+        onClose={() => setRequestsModalOpen(false)}
+        title="Employee Profile & Bank Detail Change Requests"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div className="flex space-x-2 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setRequestsFilter('Pending')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  requestsFilter === 'Pending'
+                    ? 'bg-amber-100 text-amber-900 font-bold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Pending Review ({profileRequests.filter((r) => r.status === 'Pending').length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRequestsFilter('All')}
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  requestsFilter === 'All'
+                    ? 'bg-slate-100 text-slate-900 font-bold'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                All History ({profileRequests.length})
+              </button>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              Changes apply to database only after HR approval
+            </span>
+          </div>
+
+          <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
+            {profileRequests.filter((r) => requestsFilter === 'All' || r.status === requestsFilter).length === 0 ? (
+              <div className="p-8 text-center text-slate-400 text-xs bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="font-semibold text-slate-600">No profile change requests found.</p>
+                <p className="mt-0.5">When employees request changes to their phone, address, or bank details, they will appear here for verification.</p>
+              </div>
+            ) : (
+              profileRequests
+                .filter((r) => requestsFilter === 'All' || r.status === requestsFilter)
+                .map((req) => {
+                  let changes = {};
+                  let currentData = {};
+                  try {
+                    changes = typeof req.changes_json === 'string' ? JSON.parse(req.changes_json) : (req.changes_json || {});
+                  } catch (e) {
+                    changes = {};
+                  }
+                  try {
+                    currentData = typeof req.current_data_json === 'string' ? JSON.parse(req.current_data_json) : (req.current_data_json || {});
+                  } catch (e) {
+                    currentData = {};
+                  }
+
+                  const fieldLabels = {
+                    first_name: 'First Name',
+                    last_name: 'Last Name',
+                    phone: 'Phone Number',
+                    address: 'Residential Address',
+                    bank_name: 'Bank Name',
+                    bank_account_no: 'Account Number',
+                    bank_ifsc: 'Bank IFSC Code',
+                    tax_id: 'Tax ID / PAN',
+                  };
+
+                  return (
+                    <div
+                      key={req.id}
+                      className="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-800">
+                            {req.first_name} {req.last_name}{' '}
+                            <span className="text-xs font-mono font-normal text-slate-400">
+                              ({req.employee_code} • {req.department_name || 'Staff'})
+                            </span>
+                          </h4>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Requested: <span className="font-medium">{req.created_at?.slice(0, 16)}</span>
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                            req.status === 'Pending'
+                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : req.status === 'Approved'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-rose-50 text-rose-800 border-rose-200'
+                          }`}
+                        >
+                          {req.status}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs text-slate-700">
+                        <strong className="text-slate-900">Reason:</strong> {req.reason || 'General profile update.'}
+                      </div>
+
+                      {/* Diff Comparison Table */}
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold">
+                            <tr>
+                              <th className="py-1.5 px-3">Field</th>
+                              <th className="py-1.5 px-3">Current Value (DB)</th>
+                              <th className="py-1.5 px-3">Requested Update</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {Object.entries(changes).length === 0 ? (
+                              <tr>
+                                <td colSpan={3} className="py-2 px-3 text-slate-400 text-center">
+                                  No field changes detected.
+                                </td>
+                              </tr>
+                            ) : (
+                              Object.entries(changes).map(([field, newVal]) => {
+                                const oldVal = currentData[field] ?? 'Empty';
+                                return (
+                                  <tr key={field} className="border-b border-slate-100 last:border-0">
+                                    <td className="py-2 px-3 font-semibold text-slate-700">
+                                      {fieldLabels[field] || field}
+                                    </td>
+                                    <td className="py-2 px-3 text-slate-500 font-mono text-[11px] line-through">
+                                      {String(oldVal || 'None')}
+                                    </td>
+                                    <td className="py-2 px-3 font-bold text-emerald-700 font-mono text-[11px] bg-emerald-50/40">
+                                      {String(newVal || 'None')}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Action Bar */}
+                      {req.status === 'Pending' ? (
+                        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                          <input
+                            type="text"
+                            placeholder="HR review notes (e.g. Verified bank passbook)..."
+                            value={reviewNotes[req.id] || ''}
+                            onChange={(e) =>
+                              setReviewNotes({ ...reviewNotes, [req.id]: e.target.value })
+                            }
+                            className="w-full sm:flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                          />
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleReviewRequest(req.id, 'Rejected')}
+                              disabled={reviewingId === req.id}
+                              className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold cursor-pointer transition disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewRequest(req.id, 'Approved')}
+                              disabled={reviewingId === req.id}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer transition disabled:opacity-50 flex items-center space-x-1"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>{reviewingId === req.id ? 'Applying...' : 'Approve & Apply'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11px] text-slate-500 flex items-center justify-between border-t border-slate-100 pt-2">
+                          <span>
+                            Reviewed by: <strong>{req.reviewed_by_name || 'HR Admin'}</strong> on{' '}
+                            {req.reviewed_at?.slice(0, 16)}
+                          </span>
+                          {req.review_notes && (
+                            <span className="italic">Note: "{req.review_notes}"</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setRequestsModalOpen(false)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs"
+            >
+              Close Queue
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

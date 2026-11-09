@@ -29,14 +29,32 @@ import {
   Receipt,
   Download,
   AlertTriangle,
+  UserCheck,
 } from 'lucide-react';
 
 export default function EmployeeDetail() {
   const { id } = useParams();
-  const { currencySymbol = '$' } = useAuth();
+  const { user, role, isHr, isAdmin, isOwner, currencySymbol = '₹' } = useAuth();
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Employee Profile Update Request (HR Approval Workflow)
+  const [profileRequestOpen, setProfileRequestOpen] = useState(false);
+  const [submittingProfileRequest, setSubmittingProfileRequest] = useState(false);
+  const [pendingProfileRequest, setPendingProfileRequest] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    first_name: '',
+    last_name: '',
+    phone: '',
+    address: '',
+    bank_name: '',
+    bank_account_no: '',
+    bank_ifsc: '',
+    tax_id: '',
+    reason: '',
+  });
 
   // Edit Salary Modal
   const [editSalaryOpen, setEditSalaryOpen] = useState(false);
@@ -177,6 +195,63 @@ export default function EmployeeDetail() {
     }
   };
 
+  const fetchPendingRequests = async () => {
+    try {
+      const res = await api.getProfileRequests({ employee_id: id });
+      const pending = (res.requests || []).find((r) => r.status === 'Pending');
+      setPendingProfileRequest(pending || null);
+    } catch (e) {
+      // non-fatal
+    }
+  };
+
+  const handleOpenProfileRequest = () => {
+    if (!data?.employee) return;
+    const emp = data.employee;
+    setProfileForm({
+      first_name: emp.first_name || '',
+      last_name: emp.last_name || '',
+      phone: emp.phone || '',
+      address: emp.address || '',
+      bank_name: emp.bank_name || '',
+      bank_account_no: emp.bank_account_no || '',
+      bank_ifsc: emp.bank_ifsc || '',
+      tax_id: emp.tax_id || '',
+      reason: '',
+    });
+    setProfileRequestOpen(true);
+  };
+
+  const handleSubmitProfileRequest = async (e) => {
+    e.preventDefault();
+    if (!profileForm.reason.trim()) {
+      toast.warning('Please specify a brief reason for your update request.');
+      return;
+    }
+    try {
+      setSubmittingProfileRequest(true);
+      await api.submitProfileRequest({
+        employee_id: id,
+        first_name: profileForm.first_name,
+        last_name: profileForm.last_name,
+        phone: profileForm.phone,
+        address: profileForm.address,
+        bank_name: profileForm.bank_name,
+        bank_account_no: profileForm.bank_account_no,
+        bank_ifsc: profileForm.bank_ifsc,
+        tax_id: profileForm.tax_id,
+        reason: profileForm.reason,
+      });
+      toast.success('Profile change request submitted! It will update once HR reviews and approves.', 'Submitted for HR Approval');
+      setProfileRequestOpen(false);
+      fetchPendingRequests();
+    } catch (err) {
+      toast.error(err.message || 'Failed to submit profile request.');
+    } finally {
+      setSubmittingProfileRequest(false);
+    }
+  };
+
   const fetchDetail = async () => {
     try {
       setLoading(true);
@@ -196,6 +271,7 @@ export default function EmployeeDetail() {
     fetchDetail();
     fetchDocuments();
     fetchFnfRecord();
+    fetchPendingRequests();
   }, [id]);
 
   useEffect(() => {
@@ -289,16 +365,55 @@ export default function EmployeeDetail() {
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={() => setEditSalaryOpen(true)}
-            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+            onClick={handleOpenProfileRequest}
+            disabled={!!pendingProfileRequest}
+            className={`px-4 py-2 border rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer ${
+              pendingProfileRequest
+                ? 'bg-amber-50 text-amber-700 border-amber-200 opacity-90 cursor-not-allowed'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200 shadow-2xs'
+            }`}
+            title={pendingProfileRequest ? 'Request already under review by HR' : 'Submit changes for HR approval'}
           >
-            <Edit className="w-3.5 h-3.5" />
-            <span>Configure Salary</span>
+            <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>{pendingProfileRequest ? 'Change Request Pending' : 'Request Profile / Bank Update'}</span>
           </button>
+
+          {(isHr || isAdmin || isOwner) && (
+            <button
+              onClick={() => setEditSalaryOpen(true)}
+              className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition cursor-pointer"
+            >
+              <Edit className="w-3.5 h-3.5" />
+              <span>Configure Salary</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Pending Profile Request Alert */}
+      {pendingProfileRequest && (
+        <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex items-start gap-3.5 text-xs text-amber-900 shadow-xs animate-fadeIn">
+          <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold text-amber-900 text-sm">
+                ⏳ Profile & Banking Change Request Pending HR Review
+              </span>
+              <span className="text-[11px] text-amber-700 font-mono bg-amber-100/70 px-2 py-0.5 rounded-md">
+                Submitted: {pendingProfileRequest.created_at?.slice(0, 10)}
+              </span>
+            </div>
+            <p className="mt-1 text-amber-800">
+              Reason provided: <span className="font-semibold italic">"{pendingProfileRequest.reason}"</span>
+            </p>
+            <p className="mt-0.5 text-amber-700 text-[11px]">
+              Per company policy, personal and banking details are frozen until verified and approved by HR/Admin. Once approved, the record will automatically update.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-slate-200">
@@ -434,17 +549,17 @@ export default function EmployeeDetail() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-xs">
               <p className="text-xs text-slate-500 font-medium">Monthly Gross Earnings</p>
-              <h4 className="mt-1 text-2xl font-bold text-slate-800">${totalEarningsEst.toLocaleString()}</h4>
+              <h4 className="mt-1 text-2xl font-bold text-slate-800">{currencySymbol}{totalEarningsEst.toLocaleString()}</h4>
               <p className="mt-1 text-[11px] text-slate-400">Base + Allowances</p>
             </div>
             <div className="p-5 bg-white rounded-2xl border border-slate-100 shadow-xs">
               <p className="text-xs text-slate-500 font-medium">Monthly Deductions</p>
-              <h4 className="mt-1 text-2xl font-bold text-rose-600">${totalDeductionsEst.toLocaleString()}</h4>
+              <h4 className="mt-1 text-2xl font-bold text-rose-600">{currencySymbol}{totalDeductionsEst.toLocaleString()}</h4>
               <p className="mt-1 text-[11px] text-slate-400">PF, ESI, Taxes</p>
             </div>
             <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 shadow-xs">
               <p className="text-xs text-emerald-700 font-medium">Estimated Net Salary</p>
-              <h4 className="mt-1 text-2xl font-bold text-emerald-900">${netSalaryEst.toLocaleString()}</h4>
+              <h4 className="mt-1 text-2xl font-bold text-emerald-900">{currencySymbol}{netSalaryEst.toLocaleString()}</h4>
               <p className="mt-1 text-[11px] text-emerald-600">Net monthly payout</p>
             </div>
           </div>
@@ -863,7 +978,7 @@ export default function EmployeeDetail() {
                             [15 × (Basic+DA) × {fnfPreview.tenure.gratuity_qualifying_years}] / 26
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-emerald-600">
-                            +₹{fnfPreview.statutory_components.gratuity_amount.toLocaleString()}
+                            +{currencySymbol}{fnfPreview.statutory_components.gratuity_amount.toLocaleString()}
                           </td>
                         </tr>
                         <tr>
@@ -874,7 +989,7 @@ export default function EmployeeDetail() {
                             {fnfPreview.statutory_components.earned_leaves_days} Earned Leave days @ (Basic+DA)/30
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-emerald-600">
-                            +₹{fnfPreview.statutory_components.leave_encashment_amount.toLocaleString()}
+                            +{currencySymbol}{fnfPreview.statutory_components.leave_encashment_amount.toLocaleString()}
                           </td>
                         </tr>
                         <tr>
@@ -885,7 +1000,7 @@ export default function EmployeeDetail() {
                             Prorated days worked in final pay cycle
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-emerald-600">
-                            +₹{fnfPreview.statutory_components.pending_salary.toLocaleString()}
+                            +{currencySymbol}{fnfPreview.statutory_components.pending_salary.toLocaleString()}
                           </td>
                         </tr>
                         <tr>
@@ -896,7 +1011,7 @@ export default function EmployeeDetail() {
                             Pending unreimbursed approved claims
                           </td>
                           <td className="py-2.5 px-3 text-right font-bold text-emerald-600">
-                            +₹{fnfPreview.statutory_components.pending_reimbursements.toLocaleString()}
+                            +{currencySymbol}{fnfPreview.statutory_components.pending_reimbursements.toLocaleString()}
                           </td>
                         </tr>
                         {fnfPreview.statutory_components.notice_shortfall_days > 0 && (
@@ -908,7 +1023,7 @@ export default function EmployeeDetail() {
                               {fnfPreview.statutory_components.notice_shortfall_days} days shortfall @ Gross/30
                             </td>
                             <td className="py-2.5 px-3 text-right font-bold text-rose-600">
-                              -₹{fnfPreview.statutory_components.notice_pay_deduction.toLocaleString()}
+                              -{currencySymbol}{fnfPreview.statutory_components.notice_pay_deduction.toLocaleString()}
                             </td>
                           </tr>
                         )}
@@ -922,7 +1037,7 @@ export default function EmployeeDetail() {
                           Net Full & Final Payable
                         </span>
                         <span className="text-2xl font-black">
-                          ₹{fnfPreview.statutory_components.total_payable.toLocaleString()}
+                          {currencySymbol}{fnfPreview.statutory_components.total_payable.toLocaleString()}
                         </span>
                       </div>
 
@@ -1017,7 +1132,7 @@ export default function EmployeeDetail() {
         <form onSubmit={handleSaveSalary} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Base Monthly Salary ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Base Monthly Salary ({currencySymbol})</label>
               <input
                 type="number"
                 name="base_salary"
@@ -1028,7 +1143,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">HRA Allowance ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">HRA Allowance ({currencySymbol})</label>
               <input
                 type="number"
                 name="hra"
@@ -1038,7 +1153,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Conveyance Allowance ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Conveyance Allowance ({currencySymbol})</label>
               <input
                 type="number"
                 name="conveyance_allowance"
@@ -1048,7 +1163,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Medical Allowance ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Medical Allowance ({currencySymbol})</label>
               <input
                 type="number"
                 name="medical_allowance"
@@ -1058,7 +1173,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Special Allowance ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Special Allowance ({currencySymbol})</label>
               <input
                 type="number"
                 name="special_allowance"
@@ -1068,7 +1183,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Overtime Rate ($/hr)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Overtime Rate ({currencySymbol}/hr)</label>
               <input
                 type="number"
                 name="overtime_rate_per_hour"
@@ -1078,7 +1193,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Provident Fund (PF) ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Provident Fund (PF) ({currencySymbol})</label>
               <input
                 type="number"
                 name="provident_fund"
@@ -1088,7 +1203,7 @@ export default function EmployeeDetail() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">TDS / Income Tax ($)</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">TDS / Income Tax ({currencySymbol})</label>
               <input
                 type="number"
                 name="tds_tax"
@@ -1113,6 +1228,157 @@ export default function EmployeeDetail() {
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
             >
               {savingSalary ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Employee Profile & Banking Update Request Modal (HR Approval Workflow) */}
+      <Modal
+        isOpen={profileRequestOpen}
+        onClose={() => setProfileRequestOpen(false)}
+        title="Request Profile & Banking Information Update"
+        size="lg"
+      >
+        <form onSubmit={handleSubmitProfileRequest} className="space-y-4">
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+            <Shield className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            <p>
+              <strong>HR Approval Required:</strong> As an employee, you have the authority to update your personal and banking disbursement details. In accordance with enterprise audit standards, updates submitted here are queued for HR/Admin review and will only be applied to the system once approved.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-1">
+              Personal Information
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">First Name</label>
+                <input
+                  type="text"
+                  value={profileForm.first_name}
+                  onChange={(e) => setProfileForm({ ...profileForm, first_name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={profileForm.last_name}
+                  onChange={(e) => setProfileForm({ ...profileForm, last_name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={profileForm.phone}
+                  onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="e.g. +91 9876543210"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Residential Address</label>
+                <input
+                  type="text"
+                  value={profileForm.address}
+                  onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="Street address, City, State, PIN"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-100 pb-1">
+              Banking & Disbursement Details
+            </h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Bank Name</label>
+                <input
+                  type="text"
+                  value={profileForm.bank_name}
+                  onChange={(e) => setProfileForm({ ...profileForm, bank_name: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="e.g. HDFC Bank, SBI, ICICI"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Bank Account Number</label>
+                <input
+                  type="text"
+                  value={profileForm.bank_account_no}
+                  onChange={(e) => setProfileForm({ ...profileForm, bank_account_no: e.target.value })}
+                  className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="e.g. 50100456789012"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Bank IFSC / SWIFT Code</label>
+                <input
+                  type="text"
+                  value={profileForm.bank_ifsc}
+                  onChange={(e) => setProfileForm({ ...profileForm, bank_ifsc: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-xs font-mono uppercase border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="e.g. HDFC0001234"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Tax ID / PAN / SSN</label>
+                <input
+                  type="text"
+                  value={profileForm.tax_id}
+                  onChange={(e) => setProfileForm({ ...profileForm, tax_id: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 text-xs font-mono uppercase border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="e.g. ABCDE1234F"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Reason for Update Request <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={2}
+              required
+              value={profileForm.reason}
+              onChange={(e) => setProfileForm({ ...profileForm, reason: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="e.g. Changed primary salary account to HDFC Bank, new permanent address."
+            />
+          </div>
+
+          <div className="pt-4 flex justify-end space-x-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setProfileRequestOpen(false)}
+              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingProfileRequest}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{submittingProfileRequest ? 'Submitting...' : 'Submit to HR for Approval'}</span>
             </button>
           </div>
         </form>

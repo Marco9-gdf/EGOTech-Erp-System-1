@@ -41,7 +41,7 @@ export function clockIn(req, res) {
 
     const todayStr = getLocalDateString();
     const timeStr = getLocalTimeString();
-    const { latitude, longitude, notes = 'Web Punch-In' } = req.body || {};
+    const { latitude, longitude, notes = 'Web Punch-In', selfie_url = null } = req.body || {};
 
     // Check existing record
     const existing = db.prepare('SELECT * FROM attendance WHERE employee_id = ? AND date = ?').get(employeeId, todayStr);
@@ -123,14 +123,15 @@ export function clockIn(req, res) {
           longitude = ?,
           distance_meters = ?,
           is_geofenced = ?,
-          notes = ?
+          notes = ?,
+          selfie_url = COALESCE(?, selfie_url)
         WHERE id = ?
-      `).run(timeStr, isLate, latitude ?? null, longitude ?? null, distanceMeters ?? null, isGeofenced, notes, existing.id);
+      `).run(timeStr, isLate, latitude ?? null, longitude ?? null, distanceMeters ?? null, isGeofenced, notes, selfie_url, existing.id);
     } else {
       db.prepare(`
-        INSERT INTO attendance (employee_id, date, clock_in, status, is_late, latitude, longitude, distance_meters, is_geofenced, notes)
-        VALUES (?, ?, ?, 'Present', ?, ?, ?, ?, ?, ?)
-      `).run(employeeId, todayStr, timeStr, isLate, latitude ?? null, longitude ?? null, distanceMeters ?? null, isGeofenced, notes);
+        INSERT INTO attendance (employee_id, date, clock_in, status, is_late, latitude, longitude, distance_meters, is_geofenced, notes, selfie_url)
+        VALUES (?, ?, ?, 'Present', ?, ?, ?, ?, ?, ?, ?)
+      `).run(employeeId, todayStr, timeStr, isLate, latitude ?? null, longitude ?? null, distanceMeters ?? null, isGeofenced, notes, selfie_url);
     }
 
     res.json({
@@ -304,7 +305,7 @@ export function getMasterAttendance(req, res) {
              a.id as attendance_id, a.clock_in, a.clock_out, a.working_hours,
              a.overtime_hours, a.is_late,
              COALESCE(a.status, 'Absent') as attendance_status,
-             a.notes
+             a.notes, a.selfie_url, a.distance_meters, a.is_geofenced
       FROM employees e
       LEFT JOIN departments d ON e.department_id = d.id
       LEFT JOIN shifts s ON e.shift_id = s.id

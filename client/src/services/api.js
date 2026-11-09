@@ -180,6 +180,49 @@ function handleOfflineFallback(endpoint, options = {}) {
     return Promise.resolve({ message: 'Employee onboarded into Egotech successfully.', employee_id: created.id, employee_code: created.employee_code });
   }
 
+  if (endpoint === '/employees/profile-request' && options.method === 'POST') {
+    let payload = {};
+    try { payload = JSON.parse(options.body || '{}'); } catch (_) {}
+    const requests = JSON.parse(localStorage.getItem('preview_profile_requests') || '[]');
+    const newReq = {
+      id: Date.now(),
+      employee_id: 1,
+      employee_code: 'EMP0003',
+      first_name: payload.changes?.first_name || 'John',
+      last_name: payload.changes?.last_name || 'Doe',
+      email: 'john.doe@company.com',
+      designation: 'Senior Full-Stack Engineer',
+      changes: payload.changes || {},
+      current_data: { phone: '+1 (555) 234-5678', bank_name: 'Wells Fargo', bank_account_no: '1122334455' },
+      reason: payload.reason || 'Personal update',
+      status: 'Pending',
+      created_at: new Date().toISOString(),
+    };
+    requests.unshift(newReq);
+    try { localStorage.setItem('preview_profile_requests', JSON.stringify(requests)); } catch (_) {}
+    return Promise.resolve({ message: 'Profile update request submitted for HR approval.', request_id: newReq.id, status: 'Pending' });
+  }
+
+  if (endpoint.includes('/profile-requests') && endpoint.endsWith('/review')) {
+    let payload = {};
+    try { payload = JSON.parse(options.body || '{}'); } catch (_) {}
+    const reqId = endpoint.split('/')[3];
+    const requests = JSON.parse(localStorage.getItem('preview_profile_requests') || '[]');
+    const target = requests.find(r => String(r.id) === String(reqId));
+    if (target) {
+      target.status = payload.action || 'Approved';
+      target.reviewed_at = new Date().toISOString();
+      target.review_notes = payload.review_notes || '';
+      try { localStorage.setItem('preview_profile_requests', JSON.stringify(requests)); } catch (_) {}
+    }
+    return Promise.resolve({ message: `Profile request ${payload.action || 'Approved'} successfully.`, status: payload.action || 'Approved' });
+  }
+
+  if (endpoint.startsWith('/employees/profile-requests')) {
+    const requests = JSON.parse(localStorage.getItem('preview_profile_requests') || '[]');
+    return Promise.resolve({ requests });
+  }
+
   if (endpoint.startsWith('/employees')) {
     return Promise.resolve({ employees: getSavedEmployees(), total: getSavedEmployees().length });
   }
@@ -322,6 +365,12 @@ export const api = {
   deleteEmployee: (id) => request(`/employees/${id}`, { method: 'DELETE' }),
   getDepartments: (companyId) => request('/employees/departments' + (companyId ? `?company_id=${companyId}` : '')),
   getShifts: (companyId) => request('/employees/shifts' + (companyId ? `?company_id=${companyId}` : '')),
+  submitProfileRequest: (data) => request('/employees/profile-request', { method: 'POST', body: JSON.stringify(data) }),
+  getProfileRequests: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/employees/profile-requests${query ? `?${query}` : ''}`);
+  },
+  reviewProfileRequest: (id, data) => request(`/employees/profile-requests/${id}/review`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Attendance
   clockIn: (data) => request('/attendance/clock-in', { method: 'POST', body: JSON.stringify(typeof data === 'string' ? { notes: data } : (data || {})) }),

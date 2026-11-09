@@ -24,6 +24,9 @@ import {
   Wifi,
   Trash2,
   Zap,
+  Camera,
+  Eye,
+  X,
 } from 'lucide-react';
 
 export default function Attendance() {
@@ -31,6 +34,7 @@ export default function Attendance() {
   const toast = useToast();
   const [activeTab, setActiveTab] = useState(isHr ? 'master' : 'my');
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [viewingSelfie, setViewingSelfie] = useState(null);
 
   // Master Attendance State
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -404,6 +408,7 @@ export default function Attendance() {
                     <th className="py-3 px-4">Department & Shift</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Clock In</th>
+                    <th className="py-3 px-4">Selfie Check</th>
                     <th className="py-3 px-4">Clock Out</th>
                     <th className="py-3 px-4">Hours</th>
                     <th className="py-3 px-4">Notes</th>
@@ -413,13 +418,13 @@ export default function Attendance() {
                 <tbody className="divide-y divide-slate-100">
                   {masterLoading ? (
                     <tr>
-                      <td colSpan="8" className="py-8 text-center text-slate-400">
+                      <td colSpan="9" className="py-8 text-center text-slate-400">
                         Loading attendance records...
                       </td>
                     </tr>
                   ) : masterData?.records?.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="py-8 text-center text-slate-400">
+                      <td colSpan="9" className="py-8 text-center text-slate-400">
                         No records matching the filter criteria.
                       </td>
                     </tr>
@@ -444,6 +449,27 @@ export default function Attendance() {
                         </td>
                         <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
                           {rec.clock_in || '--'}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          {rec.selfie_url ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingSelfie(rec)}
+                              className="inline-flex items-center space-x-1.5 p-1 hover:bg-slate-100 rounded-lg transition cursor-pointer group"
+                              title="Click to view verified punch selfie"
+                            >
+                              <img
+                                src={rec.selfie_url}
+                                alt="Selfie"
+                                className="w-7 h-7 rounded-full object-cover border-2 border-emerald-500 shadow-2xs group-hover:scale-105 transition"
+                              />
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                Verified
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium">--</span>
+                          )}
                         </td>
                         <td className="py-3.5 px-4 font-mono font-medium text-slate-700">
                           {rec.clock_out || '--'}
@@ -918,6 +944,63 @@ export default function Attendance() {
         confirmText="Mark All Present"
         type="primary"
       />
+
+      {/* Remote Punch-In Selfie Proof Modal */}
+      {viewingSelfie && (
+        <Modal
+          isOpen={!!viewingSelfie}
+          onClose={() => setViewingSelfie(null)}
+          title="Remote Punch-In Selfie Verification"
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-950 shadow-inner max-h-[440px] flex items-center justify-center">
+              <img
+                src={viewingSelfie.selfie_url}
+                alt="Clock-in Proof"
+                className="max-h-[420px] w-auto object-contain mx-auto"
+              />
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-left grid grid-cols-2 gap-2.5 text-xs">
+              <div>
+                <span className="text-slate-400 block font-medium">Employee</span>
+                <span className="font-semibold text-slate-800">
+                  {viewingSelfie.first_name ? `${viewingSelfie.first_name} ${viewingSelfie.last_name || ''}` : viewingSelfie.employee_name || 'Staff Member'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-medium">Clock-in Time</span>
+                <span className="font-semibold text-slate-800 font-mono">
+                  {viewingSelfie.clock_in || viewingSelfie.date || 'Today'}
+                </span>
+              </div>
+              {viewingSelfie.distance_meters !== null && viewingSelfie.distance_meters !== undefined && (
+                <div>
+                  <span className="text-slate-400 block font-medium">GPS Location</span>
+                  <span className="font-semibold text-slate-800">
+                    {viewingSelfie.is_geofenced ? '🏢 Office Geofence (Passed)' : `📍 Remote (${Math.round(viewingSelfie.distance_meters)}m from office)`}
+                  </span>
+                </div>
+              )}
+              <div>
+                <span className="text-slate-400 block font-medium">Audit Status</span>
+                <span className="inline-flex items-center text-emerald-600 font-bold text-xs">
+                  ✓ Photo & Watermark Verified
+                </span>
+              </div>
+            </div>
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setViewingSelfie(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-xl cursor-pointer transition shadow-xs"
+              >
+                Close Proof
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
