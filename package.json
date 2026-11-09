@@ -9,14 +9,14 @@
     "server"
   ],
   "scripts": {
-    "start": "node server/src/index.js",
+    "start": "node --experimental-sqlite server/src/index.js",
     "server": "npm run dev --workspace=server",
     "client": "npm run dev --workspace=client",
     "seed": "npm run seed --workspace=server",
     "build": "npm --prefix client install && npm --prefix client run build",
     "build:client": "npm --prefix client install && npm --prefix client run build",
     "build:render": "npm install && npm --prefix client install && npm --prefix client run build",
-    "serve": "node server/src/index.js"
+    "serve": "node --experimental-sqlite server/src/index.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -4,9 +4,11 @@ services:
     runtime: node
     plan: free
     buildCommand: npm install && npm run build:render
-    startCommand: node server/src/index.js
+    startCommand: node --experimental-sqlite server/src/index.js
     envVars:
       - key: NODE_VERSION
         value: 22.12.0
+      - key: NODE_OPTIONS
+        value: --experimental-sqlite
       - key: PORT
         value: 5000

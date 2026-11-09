@@ -25,7 +25,7 @@ Render will ask for a few simple fields:
 * **Region:** (Leave default, e.g. Oregon or Frankfurt)
 * **Branch:** `main`
 * **Build Command:** `npm run build:render`
-* **Start Command:** `node server/src/index.js`
+* **Start Command:** `node --experimental-sqlite server/src/index.js` (or simply `npm start`)
 * **Instance Type:** `Free`
 
 *(Render auto-detects `render.yaml` if you use Blueprint, or you can fill in the fields above).*
