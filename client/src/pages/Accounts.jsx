@@ -19,6 +19,7 @@ import {
   RefreshCw,
   Power,
   Trash2,
+  Edit,
 } from 'lucide-react';
 
 export default function Accounts() {
@@ -42,6 +43,19 @@ export default function Accounts() {
     password: 'Password123!',
     role: 'employee',
     company_id: '',
+  });
+
+  // Edit Account & Admin Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    email: '',
+    role: 'admin',
+    status: 'Active',
+    company_id: '',
+    password: '',
   });
 
   // Reset Password Modal
@@ -89,6 +103,36 @@ export default function Accounts() {
       setError(err.message || 'Failed to create user account.');
     } finally {
       setSubmittingCreate(false);
+    }
+  };
+
+  const handleOpenEditModal = (acc) => {
+    setEditingAccount(acc);
+    setEditFormData({
+      name: acc.name || acc.display_name || '',
+      email: acc.email || '',
+      role: acc.role || 'employee',
+      status: acc.status || 'Active',
+      company_id: acc.company_id || companies[0]?.id || 1,
+      password: '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+    try {
+      setSubmittingEdit(true);
+      setError('');
+      await api.updateAccount(editingAccount.id, editFormData);
+      toast.success(`Account details for ${editFormData.email} updated successfully!`, 'Account Updated');
+      setEditModalOpen(false);
+      fetchAccounts();
+    } catch (err) {
+      toast.error(err.message || 'Failed to update account.');
+    } finally {
+      setSubmittingEdit(false);
     }
   };
 
@@ -275,6 +319,15 @@ Organization: ${acc.company_name || 'Egotech Technologies'}`;
                     </td>
                     <td className="py-3.5 px-4 text-right">
                       <div className="flex items-center justify-end space-x-1">
+                        {/* Edit Account / Admin Button */}
+                        <button
+                          onClick={() => handleOpenEditModal(acc)}
+                          title="Edit User / Admin Details"
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-indigo-600" />
+                        </button>
+
                         {/* Copy Info Button */}
                         <button
                           onClick={() => handleCopyCredentials(acc)}
@@ -438,7 +491,16 @@ Organization: ${acc.company_name || 'Egotech Technologies'}`;
           </p>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1">New Password *</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">New Password *</label>
+              <button
+                type="button"
+                onClick={() => setNewPassword('826999')}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded cursor-pointer transition"
+              >
+                Set to 826999
+              </button>
+            </div>
             <div className="relative">
               <input
                 type="text"
@@ -467,6 +529,135 @@ Organization: ${acc.company_name || 'Egotech Technologies'}`;
               className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
             >
               {submittingReset ? 'Resetting...' : 'Save New Password'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit User & Company Admin Account Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title={editingAccount?.role === 'admin' ? 'Edit Company Administrator Account' : 'Edit User Account'}
+      >
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          {editingAccount?.role === 'admin' && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-center space-x-2">
+              <Shield className="w-4 h-4 text-purple-600 shrink-0" />
+              <span>
+                <strong>Company Administrator:</strong> Has full access to manage employees, attendance, and settings for their organization.
+              </span>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name</label>
+            <input
+              type="text"
+              value={editFormData.name}
+              onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="e.g. John Doe / Company Admin"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Login Email Address</label>
+            <input
+              type="email"
+              value={editFormData.email}
+              onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Account Role</label>
+              <select
+                value={editFormData.role}
+                onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value })}
+                disabled={editingAccount?.role === 'owner'}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100"
+              >
+                <option value="admin">Company Administrator (Full Admin Access)</option>
+                <option value="hr">HR Specialist (Attendance, Leaves, Payroll)</option>
+                <option value="employee">Employee (Punch card & payslips)</option>
+                {isOwner && <option value="owner">Platform Owner (Universal Control)</option>}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+              <select
+                value={editFormData.status}
+                onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              >
+                <option value="Active">Active (Permitted to Log In)</option>
+                <option value="Suspended">Suspended (Access Blocked)</option>
+              </select>
+            </div>
+          </div>
+
+          {isOwner && companies.length > 0 && editingAccount?.role !== 'owner' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Assigned Organization</label>
+              <select
+                value={editFormData.company_id}
+                onChange={(e) => setEditFormData({ ...editFormData, company_id: e.target.value })}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              >
+                {companies.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.code || 'Company #' + c.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-slate-700">
+                Update Password <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setEditFormData({ ...editFormData, password: '826999' })}
+                className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-0.5 rounded cursor-pointer transition"
+              >
+                Quick-Set 826999
+              </button>
+            </div>
+            <input
+              type="text"
+              value={editFormData.password}
+              onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+              className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="Leave empty to keep current password"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Leave blank to keep existing password, or enter a new one to update immediately.
+            </p>
+          </div>
+
+          <div className="pt-4 flex justify-end space-x-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setEditModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={submittingEdit}
+              className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
+            >
+              {submittingEdit ? 'Saving Changes...' : 'Save Account Changes'}
             </button>
           </div>
         </form>

@@ -218,7 +218,45 @@ export function updateCompany(req, res) {
       office_latitude,
       office_longitude,
       geofence_radius_meters,
+      admin_name,
+      admin_email,
+      admin_password,
     } = req.body;
+
+    if (admin_name || admin_email || admin_password) {
+      const adminUser = db.prepare('SELECT id, email FROM users WHERE company_id = ? AND role = ? LIMIT 1').get(id, 'admin');
+      if (adminUser) {
+        const adminUpdates = [];
+        const adminParams = [];
+        if (admin_name) {
+          adminUpdates.push('name = ?');
+          adminParams.push(admin_name.trim());
+        }
+        if (admin_email) {
+          const cleanEmail = admin_email.toLowerCase().trim();
+          const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND id != ?').get(cleanEmail, adminUser.id);
+          if (existing) {
+            return res.status(400).json({ error: `The administrator email "${cleanEmail}" is already taken.` });
+          }
+          adminUpdates.push('email = ?');
+          adminParams.push(cleanEmail);
+        }
+        if (admin_password && admin_password.trim().length >= 4) {
+          const hash = bcrypt.hashSync(admin_password.trim(), 10);
+          adminUpdates.push('password_hash = ?');
+          adminParams.push(hash);
+        }
+        if (adminUpdates.length > 0) {
+          adminParams.push(adminUser.id);
+          db.prepare(`UPDATE users SET ${adminUpdates.join(', ')} WHERE id = ?`).run(...adminParams);
+        }
+      } else if (admin_email) {
+        const cleanEmail = admin_email.toLowerCase().trim();
+        const hash = bcrypt.hashSync(admin_password || '826999', 10);
+        db.prepare('INSERT INTO users (company_id, name, email, password_hash, role, status) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(id, admin_name || `${name || 'Company'} Administrator`, cleanEmail, hash, 'admin', 'Active');
+      }
+    }
 
     db.prepare(`
       UPDATE companies SET

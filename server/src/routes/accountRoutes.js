@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getAccounts,
   createAccount,
+  updateAccount,
   resetPassword,
   updateAccountRole,
   updateAccountStatus,
@@ -16,6 +17,7 @@ router.use(requireRoles('owner', 'admin'));
 
 router.get('/', getAccounts);
 router.post('/', createAccount);
+router.put('/:id', updateAccount);
 router.put('/:id/password', resetPassword);
 router.put('/:id/role', updateAccountRole);
 router.put('/:id/status', updateAccountStatus);

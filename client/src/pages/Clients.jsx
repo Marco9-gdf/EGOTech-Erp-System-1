@@ -140,14 +140,17 @@ export default function Clients() {
       email: comp.email || '',
       phone: comp.phone || '',
       address: comp.address || '',
-      currency_symbol: comp.currency_symbol || '$',
-      currency_code: comp.currency_code || 'USD',
+      currency_symbol: comp.currency_symbol || '₹',
+      currency_code: comp.currency_code || 'INR',
       plan: comp.plan || 'Enterprise',
       status: comp.status || 'Active',
       logo_url: comp.logo_url || '',
       primary_color: comp.primary_color || '#0078d4',
       powered_by_text: comp.powered_by_text || 'Powered by Egotech',
       custom_tagline: comp.custom_tagline || '',
+      admin_name: comp.admin_name || '',
+      admin_email: comp.admin_email || '',
+      admin_password: '',
     });
     setEditModalOpen(true);
   };
@@ -393,11 +396,11 @@ Co-Branding: ${formData.powered_by_text || 'Powered by Egotech'}`;
                     <td className="py-3.5 px-4 text-right">
                       <button
                         onClick={() => handleOpenEditModal(c)}
-                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 ml-auto cursor-pointer border border-slate-200"
-                        title="Customize client logo, primary brand color, and 'Powered By' co-branding"
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-800 rounded-lg text-xs font-semibold transition flex items-center space-x-1.5 ml-auto cursor-pointer border border-slate-200 shadow-2xs"
+                        title="Edit organization profile, branding, and administrator login"
                       >
-                        <Palette className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Co-Brand</span>
+                        <Edit className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Edit Org & Admin</span>
                       </button>
                     </td>
                   </tr>
@@ -766,7 +769,7 @@ Co-Branding: ${formData.powered_by_text || 'Powered by Egotech'}`;
       <Modal
         isOpen={editModalOpen}
         onClose={() => setEditModalOpen(false)}
-        title={`Customize Co-Branding: ${editingCompany?.name || ''}`}
+        title={`Edit Organization & Administrator: ${editingCompany?.name || ''}`}
         maxWidth="max-w-xl"
       >
         <form onSubmit={handleSaveEdit} className="space-y-4 py-1">
@@ -777,8 +780,64 @@ Co-Branding: ${formData.powered_by_text || 'Powered by Egotech'}`;
             </div>
           )}
 
+          {/* Company Administrator Account Section */}
+          <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center space-x-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Company Administrator Account</span>
+              </h4>
+              <button
+                type="button"
+                onClick={() => setEditForm((prev) => ({ ...prev, admin_password: '826999' }))}
+                className="text-[11px] font-bold text-indigo-700 bg-white border border-indigo-200 px-2 py-0.5 rounded-md hover:bg-indigo-100 transition cursor-pointer shadow-2xs"
+              >
+                Set Pass: 826999
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Admin Full Name</label>
+                <input
+                  type="text"
+                  name="admin_name"
+                  value={editForm.admin_name}
+                  onChange={handleEditChange}
+                  placeholder="e.g. Org Administrator"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Admin Login Email</label>
+                <input
+                  type="email"
+                  name="admin_email"
+                  value={editForm.admin_email}
+                  onChange={handleEditChange}
+                  placeholder="admin@company.com"
+                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-white"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                New Password <span className="font-normal text-slate-400">(leave blank to keep unchanged)</span>
+              </label>
+              <input
+                type="text"
+                name="admin_password"
+                value={editForm.admin_password}
+                onChange={handleEditChange}
+                placeholder="Leave blank or enter new password"
+                className="w-full px-3 py-1.5 text-xs font-mono border border-slate-200 rounded-lg bg-white"
+              />
+            </div>
+          </div>
+
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Company Legal Name</label>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Company Legal Name</label>
             <input
               type="text"
               name="name"

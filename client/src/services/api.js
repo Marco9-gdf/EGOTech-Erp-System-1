@@ -348,6 +348,7 @@ export const api = {
     return request(`/accounts${query ? `?${query}` : ''}`);
   },
   createAccount: (data) => request('/accounts', { method: 'POST', body: JSON.stringify(data) }),
+  updateAccount: (id, data) => request(`/accounts/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   resetAccountPassword: (id, new_password) => request(`/accounts/${id}/password`, { method: 'PUT', body: JSON.stringify({ new_password }) }),
   updateAccountRole: (id, role) => request(`/accounts/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) }),
   updateAccountStatus: (id, status) => request(`/accounts/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),

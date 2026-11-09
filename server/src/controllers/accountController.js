@@ -151,6 +151,93 @@ export function resetPassword(req, res) {
   }
 }
 
+export function updateAccount(req, res) {
+  try {
+    const id = req.params.id;
+    const { name, email, role, status, company_id, password } = req.body;
+
+    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!user) {
+      return res.status(404).json({ error: 'User account not found.' });
+    }
+
+    const isOwner = req.user.role === 'owner';
+    if (!isOwner) {
+      if (user.role === 'owner') {
+        return res.status(403).json({ error: 'Cannot modify Platform Owner account.' });
+      }
+      if (user.company_id !== req.currentUser.company_id) {
+        return res.status(403).json({ error: 'Access denied to accounts outside your company.' });
+      }
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      params.push(name.trim());
+    }
+
+    if (email !== undefined && email.trim() !== '') {
+      const cleanEmail = email.trim().toLowerCase();
+      const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = ? AND id != ?').get(cleanEmail, id);
+      if (existing) {
+        return res.status(400).json({ error: `The email "${cleanEmail}" is already used by another user.` });
+      }
+      updates.push('email = ?');
+      params.push(cleanEmail);
+    }
+
+    if (role !== undefined) {
+      if (user.role === 'owner' && role !== 'owner') {
+        return res.status(403).json({ error: 'Cannot alter Platform Owner role.' });
+      }
+      if (['owner', 'admin', 'hr', 'employee'].includes(role)) {
+        updates.push('role = ?');
+        params.push(role);
+      }
+    }
+
+    if (status !== undefined && ['Active', 'Suspended'].includes(status)) {
+      if (Number(id) === req.user.id && status === 'Suspended') {
+        return res.status(400).json({ error: 'You cannot suspend your own active logged-in account.' });
+      }
+      updates.push('status = ?');
+      params.push(status);
+    }
+
+    if (isOwner && company_id !== undefined && company_id !== '') {
+      updates.push('company_id = ?');
+      params.push(Number(company_id));
+    }
+
+    if (password && password.trim().length >= 4) {
+      const hash = bcrypt.hashSync(password.trim(), 10);
+      updates.push('password_hash = ?');
+      params.push(hash);
+    }
+
+    if (updates.length > 0) {
+      params.push(id);
+      db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+
+    const updatedUser = db.prepare(`
+      SELECT u.id, u.name, u.email, u.role, u.status, u.company_id, u.created_at,
+             c.name as company_name
+      FROM users u
+      LEFT JOIN companies c ON u.company_id = c.id
+      WHERE u.id = ?
+    `).get(id);
+
+    res.json({ message: 'Account updated successfully.', account: updatedUser });
+  } catch (err) {
+    console.error('updateAccount error:', err);
+    res.status(500).json({ error: 'Failed to update account: ' + err.message });
+  }
+}
+
 export function updateAccountRole(req, res) {
   try {
     const id = req.params.id;
