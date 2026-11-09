@@ -77,28 +77,43 @@ app.use((req, res, next) => {
   next();
 });
 
-// Root & API Info Endpoints
-app.get('/', (req, res) => {
-  res.json({
-    status: 'online',
-    service: 'Egotech SaaS Platform API',
-    version: '1.0.0',
-    port: PORT,
-    message: 'Backend server is running successfully on localhost:' + PORT,
-    frontend: 'http://localhost:3000',
-    endpoints: {
-      health: '/api/health',
-      auth: '/api/auth',
-      companies: '/api/companies',
-      accounts: '/api/accounts',
-      employees: '/api/employees',
-      attendance: '/api/attendance',
-      leaves: '/api/leaves',
-      payroll: '/api/payroll',
-      settings: '/api/settings/company',
-    },
+// Resolve compiled React frontend if present (Render, Railway, production full-stack deployment)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const possibleClientDistPaths = [
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(process.cwd(), 'client/dist'),
+  path.resolve(process.cwd(), 'dist'),
+];
+const clientDistPath = possibleClientDistPaths.find((p) => fs.existsSync(p));
+
+if (clientDistPath) {
+  console.log(`📦 Serving compiled static client frontend from: ${clientDistPath}`);
+  app.use(express.static(clientDistPath));
+} else {
+  // Headless mode fallback: only show JSON on root / if client dist does not exist
+  app.get('/', (req, res) => {
+    res.json({
+      status: 'online',
+      service: 'Egotech SaaS Platform API',
+      version: '1.0.0',
+      port: PORT,
+      message: 'Backend server is running successfully on port ' + PORT,
+      frontend: 'http://localhost:3000',
+      endpoints: {
+        health: '/api/health',
+        auth: '/api/auth',
+        companies: '/api/companies',
+        accounts: '/api/accounts',
+        employees: '/api/employees',
+        attendance: '/api/attendance',
+        leaves: '/api/leaves',
+        payroll: '/api/payroll',
+        settings: '/api/settings/company',
+      },
+    });
   });
-});
+}
 
 app.get('/api', (req, res) => {
   res.json({
@@ -353,19 +368,8 @@ app.get('/api/email-logs', authenticateToken, (req, res) => {
   res.json({ logs });
 });
 
-// Serve compiled React frontend if present (Render, Railway, production full-stack deployment)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const possibleClientDistPaths = [
-  path.resolve(__dirname, '../../client/dist'),
-  path.resolve(process.cwd(), 'client/dist'),
-  path.resolve(process.cwd(), 'dist')
-];
-const clientDistPath = possibleClientDistPaths.find(p => fs.existsSync(p));
-
+// SPA client fallback: serve index.html for all non-API GET requests
 if (clientDistPath) {
-  console.log(`📦 Serving compiled static client frontend from: ${clientDistPath}`);
-  app.use(express.static(clientDistPath));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/receipts')) {
       return next();
