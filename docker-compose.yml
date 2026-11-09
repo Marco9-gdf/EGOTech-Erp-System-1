@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  egotech-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: egotech-saas-platform
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - JWT_SECRET=egotech-super-secret-jwt-key-2026-production
+    volumes:
+      # Persistent SQLite volume & CERT-In compliant disaster recovery backups
+      - ./server/data:/app/server/data
+      - ./server/data/backups:/app/server/data/backups
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - egotech-network
+
+networks:
+  egotech-network:
+    driver: bridge

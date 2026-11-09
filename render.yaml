@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: egotech-erp
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build:render
+    startCommand: node server/src/index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22.12.0
+      - key: PORT
+        value: 5000

@@ -1,0 +1,14 @@
+{
+  "fileName": "egotech_backup_2026-11-07T04-21-33-964Z.db",
+  "filePath": "C:\\Users\\HARSH\\Downloads\\New folder (3)\\payroll-attendance-system\\server\\data\\backups\\egotech_backup_2026-11-07T04-21-33-964Z.db",
+  "size": "0.22 MB",
+  "sizeBytes": 229376,
+  "notes": "Automated test snapshot",
+  "createdAt": "2026-11-07T04:21:33.971Z",
+  "metrics": {
+    "employees": 10,
+    "payrollBatches": 3
+  },
+  "sha256": "SHA256-CERTIN-JFSPZB91TR",
+  "compliance": "CERT-In 180-Day ICT & DPDP Encrypted Cold Storage Compliant"
+}
